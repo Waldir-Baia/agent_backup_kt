@@ -1,0 +1,20 @@
+[versions]
+kotlin = "2.2.20"
+logback = "1.5.6"
+kotlinx-coroutines = "1.8.1"
+supabase = "2.3.0"
+ktor = "2.3.12" # ADICIONE ESTA LINHA
+
+[libraries]
+# --- Bibliotecas do Supabase Realtime ---
+# Removemos a postgrest daqui para evitar conflitos. A realtime já a inclui.
+supabase-realtime = { module = "io.github.jan-tennert.supabase:realtime-kt", version.ref = "supabase" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio-jvm", version.ref = "ktor" } # ADICIONE ESTA LINHA
+# --- Outras Bibliotecas Essenciais ---
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+
+[plugins]
+# Plugins necessários para uma aplicação Kotlin simples
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
