@@ -18,4 +18,7 @@ object Config {
     val clientId: String = properties.getProperty("client_id")
     val supabaseUrl: String = properties.getProperty("supabase_url")
     val supabaseKey: String = properties.getProperty("supabase_key")
+    val backupFolderPath: String = properties.getProperty("backup_folder_path")
+    val companyName: String = properties.getProperty("nome_empresa")
+    val companyCnpj: String = properties.getProperty("cnpj_empresa")
 }

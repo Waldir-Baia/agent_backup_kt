@@ -3,13 +3,14 @@ package com.waldirbaia.agent
 import com.waldirbaia.models.SchedulePayload
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.Json
@@ -27,14 +28,24 @@ class RealtimeManager {
         println("Conectando ao Supabase Realtime...")
         val channel = supabase.channel("schedules-channel")
 
-        // MUDANÇA AQUI: Usando 'PostgresAction' diretamente, sem 'Realtime.'
         channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-            table = "schedules"
-            filter = "client_id=eq.${Config.clientId}"
+            table = "agendamentos"
+        }.filter { change ->
+            // Filtra baseado no tipo de ação e verifica o client_id
+            when (change) {
+                is PostgresAction.Insert, is PostgresAction.Update -> {
+                    val clientId = change.record["client_id"]?.jsonPrimitive?.content
+                    clientId == Config.clientId
+                }
+                is PostgresAction.Delete -> {
+                    val clientId = change.oldRecord["client_id"]?.jsonPrimitive?.content
+                    clientId == Config.clientId
+                }
+                else -> false
+            }
         }.onEach { change ->
             println("Mudança recebida do Supabase: $change")
 
-            // MUDANÇAS AQUI: Removido o prefixo 'Realtime.'
             when (change) {
                 is PostgresAction.Insert, is PostgresAction.Update -> {
                     val payload = jsonDecoder.decodeFromJsonElement(SchedulePayload.serializer(), change.record)
