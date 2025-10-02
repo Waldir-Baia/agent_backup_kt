@@ -15,8 +15,10 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonPrimitive
+import org.slf4j.LoggerFactory
 
 class RealtimeManager {
+    private val logger = LoggerFactory.getLogger(RealtimeManager::class.java)
     private val schedulerManager = getSchedulerManager()
     private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
         install(Realtime)
@@ -25,7 +27,7 @@ class RealtimeManager {
     private val jsonDecoder = Json { ignoreUnknownKeys = true }
 
     suspend fun connectAndListen() {
-        println("Conectando ao Supabase Realtime...")
+        logger.info("Conectando ao Supabase Realtime...")
         val channel = supabase.channel("schedules-channel")
 
         channel.postgresChangeFlow<PostgresAction>(schema = "public") {
@@ -44,27 +46,27 @@ class RealtimeManager {
                 else -> false
             }
         }.onEach { change ->
-            println("Mudança recebida do Supabase: $change")
+            logger.info("Mudança recebida do Supabase: $change")
 
             when (change) {
                 is PostgresAction.Insert, is PostgresAction.Update -> {
                     val payload = jsonDecoder.decodeFromJsonElement(SchedulePayload.serializer(), change.record)
-                    println("Ação: Criar/Atualizar tarefa '${payload.schedule_name}'")
+                    logger.info("Ação: Criar/Atualizar tarefa '${payload.schedule_name}'")
                     schedulerManager.createOrUpdateTask(payload)
                 }
                 is PostgresAction.Delete -> {
                     val scheduleName = change.oldRecord["schedule_name"]?.jsonPrimitive?.content
                     if (scheduleName != null) {
-                        println("Ação: Deletar tarefa '$scheduleName'")
+                        logger.info("Ação: Deletar tarefa '$scheduleName'")
                         schedulerManager.deleteTask(scheduleName)
                     }
                 }
-                else -> println("Ação desconhecida ou não tratada.")
+                else -> logger.info("Ação desconhecida ou não tratada.")
             }
         }.launchIn(CoroutineScope(Dispatchers.Default))
 
         supabase.realtime.connect()
         channel.subscribe()
-        println("Inscrito com sucesso no canal de agendamentos para o cliente: ${Config.clientId}")
+        logger.info("Inscrito com sucesso no canal de agendamentos para o cliente: ${Config.clientId}")
     }
 }

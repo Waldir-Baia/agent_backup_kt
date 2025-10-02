@@ -11,11 +11,14 @@ import io.github.jan.supabase.postgrest.query.Count
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("MainKt")
 
 // Função de registro que roda no início
 suspend fun registerClientIfNeeded() {
-    println("Registro: Verificando se o cliente '${Config.clientId}' já está cadastrado...")
-
+//    println("Registro: Verificando se o cliente '${Config.clientId}' já está cadastrado...")
+    logger.info("Registro: Verificando se o cliente '${Config.clientId}' já está cadastrado...")
     val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
         install(Postgrest)
     }
@@ -28,7 +31,8 @@ suspend fun registerClientIfNeeded() {
         }
 
         if (result.countOrNull() == 0L) {
-            println("Registro: Cliente não encontrado. Registrando novo cliente...")
+//            println("Registro: Cliente não encontrado. Registrando novo cliente...")
+            logger.info("Registro: Cliente não encontrado. Registrando novo cliente...")
             val newClient = ClientInfo(
                 client_id = Config.clientId,
                 nome_empresa = Config.companyName,
@@ -36,19 +40,21 @@ suspend fun registerClientIfNeeded() {
             )
             // MUDANÇA AQUI 👇: Trocado 'clientes_backup' por 'clientes'
             supabase.from("clientes").insert(newClient)
-            println("Registro: Cliente '${Config.companyName}' registrado com sucesso!")
+            logger.info("Registro: Cliente '${Config.companyName}' registrado com sucesso!")
+
         } else {
-            println("Registro: Cliente já está cadastrado. Nenhuma ação necessária.")
+            logger.info("Registro: Cliente já está cadastrado. Nenhuma ação necessária.")
         }
     } catch (e: Exception) {
-        println("Registro ERRO: Falha ao tentar registrar o cliente. Causa: ${e.message}")
+        logger.error("Registro ERRO: Falha ao tentar registrar o cliente. Causa: ${e.message}")
     }
 }
 
 
 fun main() = runBlocking {
-    println("Iniciando Agente de Backup (Modo Supabase Realtime)...")
-    println("ID do Cliente: ${Config.clientId}")
+    logger.info("Iniciando Agente de Backup (Modo Supabase Realtime)...")
+    logger.info("ID do Cliente: ${Config.clientId}")
+
 
     // --- ETAPA 0: Registrar o cliente (de forma sequencial e aguardando o término) ---
     registerClientIfNeeded()
@@ -70,7 +76,7 @@ fun main() = runBlocking {
         }
     }
 
-    println("Agente iniciado. Ouvindo por agendamentos e monitorando backups.")
+    logger.info("Agente iniciado. Ouvindo por agendamentos e monitorando backups.")
     // MUDANÇA AQUI 👇: O delay(Long.MAX_VALUE) foi removido pois não é mais necessário.
     // O 'runBlocking' manterá o programa vivo enquanto os 'launch' estiverem ativos.
 }
