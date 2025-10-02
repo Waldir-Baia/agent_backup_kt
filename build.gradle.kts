@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization) // Plugin para JSON
     application // Plugin para criar um programa executável
+    id("org.graalvm.buildtools.native") version "0.10.2"
 }
 
 group = "com.waldirbaia"
@@ -13,7 +14,7 @@ application {
     mainClass.set("com.waldirbaia.agent.MainKt")
 }
 kotlin {
-    jvmToolchain(24)
+    jvmToolchain(21)
 }
 
 repositories {
