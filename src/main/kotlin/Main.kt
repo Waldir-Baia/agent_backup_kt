@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 
+
 private val logger = LoggerFactory.getLogger("MainKt")
 
 // Função de registro que roda no início
@@ -49,7 +50,6 @@ suspend fun registerClientIfNeeded() {
         logger.error("Registro ERRO: Falha ao tentar registrar o cliente. Causa: ${e.message}")
     }
 }
-
 
 fun main() = runBlocking {
     logger.info("Iniciando Agente de Backup (Modo Supabase Realtime)...")
