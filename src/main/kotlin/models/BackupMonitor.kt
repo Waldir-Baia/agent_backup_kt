@@ -13,11 +13,12 @@ data class BackupLog(
     val client_id: String,
     val file_name: String,
     val file_size_bytes: Long,
-    val file_creation_date: String // Enviamos como texto no formato ISO 8601
+    val file_creation_date: String
 )
 
 class BackupMonitor {
     private val logger = LoggerFactory.getLogger(BackupMonitor::class.java)
+
     private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
         install(Postgrest)
     }
@@ -27,13 +28,11 @@ class BackupMonitor {
 
         val backupDir = File(Config.backupFolderPath)
 
-        // 1. Validação básica da pasta
         if (!backupDir.exists() || !backupDir.isDirectory) {
             logger.info("Monitor ERRO: A pasta de backup não existe ou não é um diretório.")
             return
         }
 
-        // 2. Listar, filtrar por arquivos, ordenar por data de modificação (mais recente primeiro) e pegar os 5 primeiros
         val last5Files = backupDir.listFiles()
             ?.filter { it.isFile }
             ?.sortedByDescending { it.lastModified() }
@@ -47,7 +46,6 @@ class BackupMonitor {
         logger.info("Monitor: Encontrados ${last5Files.size} arquivos recentes. Verificando quais são novos...")
 
         try {
-            // 3. BUSCAR os arquivos que já existem no banco para este client_id
             val existingLogs = supabase.from("backup_logs")
                 .select {
                     filter {
@@ -56,10 +54,8 @@ class BackupMonitor {
                 }
                 .decodeList<BackupLog>()
 
-            // Criar um Set com os nomes dos arquivos já registrados (para busca rápida)
             val existingFileNames = existingLogs.map { it.file_name }.toSet()
 
-            // 4. Filtrar apenas os arquivos NOVOS (que não estão no banco)
             val newFiles = last5Files.filter { file ->
                 !existingFileNames.contains(file.name)
             }
@@ -71,23 +67,33 @@ class BackupMonitor {
 
             logger.info("Monitor: ${newFiles.size} arquivo(s) novo(s) encontrado(s). Preparando para enviar...")
 
-            // 5. Mapear APENAS os arquivos novos para o modelo de dados
-            val logsToSend = newFiles.map { file ->
-                BackupLog(
-                    client_id = Config.clientId,
-                    file_name = file.name,
-                    file_size_bytes = file.length(),
-                    file_creation_date = java.time.Instant.ofEpochMilli(file.lastModified()).toString()
-                )
+            var successCount = 0
+            for (file in newFiles) {
+                try {
+                    // --- CORREÇÃO APLICADA AQUI ---
+                    // Criar uma instância da data class em vez de um mapa genérico
+                    val logEntry = BackupLog(
+                        client_id = Config.clientId,
+                        file_name = file.name,
+                        file_size_bytes = file.length(),
+                        file_creation_date = java.time.Instant.ofEpochMilli(file.lastModified()).toString()
+                    )
+
+                    // Enviar o objeto serializável
+                    supabase.from("backup_logs").insert(logEntry)
+                    // -----------------------------
+
+                    successCount++
+                    logger.info("Monitor: Arquivo ${file.name} enviado com sucesso!")
+                } catch (e: Exception) {
+                    logger.error("Monitor ERRO ao enviar arquivo ${file.name}: ${e.message}")
+                }
             }
 
-            // 6. Enviar APENAS os novos dados para o Supabase
-            supabase.from("backup_logs").insert(logsToSend)
-            logger.info("Monitor: Informações de ${logsToSend.size} arquivo(s) novo(s) enviadas com sucesso para o Supabase!")
+            logger.info("Monitor: Informações de $successCount arquivo(s) enviadas com sucesso para o Supabase!")
 
         } catch (e: Exception) {
-            logger.info("Monitor ERRO: Falha ao processar informações. Causa: ${e.message}")
-            e.printStackTrace()
+            logger.error("Monitor ERRO: Falha ao processar informações. Causa: ${e.message}", e)
         }
     }
 }

@@ -5,18 +5,19 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     application
     id("org.graalvm.buildtools.native") version "0.10.2"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
-
+System.setProperty("org.graalvm.home", "C:\\GraalVM\\graalvm-community-openjdk-24.0.2+11.1")
 group = "com.waldirbaia"
 version = "1.0.0"
 
 application {
-    mainClass.set("com.waldirbaia.agent.MainKt")
+    mainClass.set("com.waldirbaia.MainKt")
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(24))
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -36,15 +37,20 @@ graalvmNative {
             imageName.set("agente-backup")
             mainClass.set("com.waldirbaia.MainKt")
 
+            metadataRepository {
+                enabled.set(true)
+            }
+
             buildArgs.addAll(
-                "--verbose",
                 "--no-fallback",
                 "-H:+ReportExceptionStackTraces",
-                "--initialize-at-build-time=org.slf4j",
-                "--initialize-at-build-time=ch.qos.logback"
+                "--enable-url-protocols=http,https,ws,wss",
+                "-H:+AddAllCharsets",
+                "-H:+UnlockExperimentalVMOptions",
             )
         }
     }
+    toolchainDetection.set(false)
 }
 
 repositories {
@@ -56,4 +62,6 @@ dependencies {
     implementation(libs.ktor.client.cio)
     implementation(libs.logback.classic)
     implementation(libs.kotlinx.coroutines.core)
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
 }

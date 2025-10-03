@@ -55,7 +55,6 @@ fun main() = runBlocking {
     logger.info("Iniciando Agente de Backup (Modo Supabase Realtime)...")
     logger.info("ID do Cliente: ${Config.clientId}")
 
-
     // --- ETAPA 0: Registrar o cliente (de forma sequencial e aguardando o término) ---
     registerClientIfNeeded()
 
