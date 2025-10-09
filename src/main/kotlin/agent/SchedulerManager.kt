@@ -4,76 +4,75 @@ import com.waldirbaia.models.SchedulePayload
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
+interface CommandExecutor {
+    fun executeRcloneCommand(payload: SchedulePayload)
+}
+
+// --- Interface para Agendamento (Linux) ---
 interface SchedulerManager {
     fun createOrUpdateTask(payload: SchedulePayload)
     fun deleteTask(scheduleName: String)
 }
 
-// Implementação para Windows
-class WindowsSchedulerManager : SchedulerManager {
-    private val logger = LoggerFactory.getLogger(WindowsSchedulerManager::class.java)
+// --- Implementação para Windows (Executor Imediato) ---
+class WindowsCommandExecutor : CommandExecutor {
+    private val logger = LoggerFactory.getLogger(WindowsCommandExecutor::class.java)
 
-    override fun createOrUpdateTask(payload: SchedulePayload) {
-        deleteTask(payload.schedule_name)
+    override fun executeRcloneCommand(payload: SchedulePayload) {
         if (!payload.is_active) {
-            logger.info("Tarefa '${payload.schedule_name}' inativa. Agendamento removido.")
+            logger.info("Comando para '${payload.schedule_name}' recebido (Windows), mas está inativo. Nenhuma ação tomada.")
             return
         }
-        val parts = payload.cron_expression.split(" ")
-        val minute = parts[0]
-        val hour = parts[1]
-        val time = "${hour.padStart(2, '0')}:${minute.padStart(2, '0')}"
-        val command = listOf("schtasks", "/create", "/tn", "\"RClone - ${payload.schedule_name}\"", "/tr", "\"${payload.rclone_command}\"", "/sc", "DAILY", "/st", time, "/f")
-        logger.info("Executando no Windows: ${command.joinToString(" ")}")
-        executeCommand(command)
-    }
-
-    override fun deleteTask(scheduleName: String) {
-        val command = listOf("schtasks", "/delete", "/tn", "\"RClone - ${scheduleName}\"", "/f")
-        logger.info("Deletando no Windows: ${command.joinToString(" ")}")
+        logger.info("Executando IMEDIATAMENTE (Windows) o comando: ${payload.rclone_command}")
+        val command = listOf("cmd.exe", "/c", payload.rclone_command)
         executeCommand(command)
     }
 }
 
-// Implementação para Linux
+// --- Implementação para Linux (Agendador - Sem Alterações) ---
 class LinuxSchedulerManager : SchedulerManager {
     private val logger = LoggerFactory.getLogger(LinuxSchedulerManager::class.java)
-
     private val cronMarker = "# RClone Agent: "
+
     override fun createOrUpdateTask(payload: SchedulePayload) {
         deleteTask(payload.schedule_name)
         if (!payload.is_active) {
-            logger.info("Tarefa '${payload.schedule_name}' inativa. Agendamento removido.")
+            logger.info("Tarefa '${payload.schedule_name}' inativa (Linux). Agendamento removido.")
             return
         }
         val newCronLine = "${payload.cron_expression} ${payload.rclone_command} $cronMarker${payload.schedule_name}\n"
-        logger.info("Adicionando ao crontab: $newCronLine")
+        logger.info("Adicionando ao crontab (Linux): $newCronLine")
         val command = "bash -c ' (crontab -l 2>/dev/null; echo \"$newCronLine\") | crontab - '"
         executeCommand(listOf("bash", "-c", command))
     }
 
     override fun deleteTask(scheduleName: String) {
-        logger.info("Removendo tarefa '$scheduleName' do crontab.")
+        logger.info("Removendo tarefa '$scheduleName' do crontab (Linux).")
         val command = "bash -c 'crontab -l 2>/dev/null | grep -v \"$cronMarker$scheduleName\" | crontab -'"
         executeCommand(listOf("bash", "-c", command))
     }
 }
 
+// --- Função Auxiliar (sem alterações) ---
 private fun executeCommand(command: List<String>) {
     try {
         val process = ProcessBuilder(command).redirectErrorStream(true).start()
-        process.inputStream.reader(Charsets.UTF_8).use { println(it.readText()) }
-        process.waitFor(10, TimeUnit.SECONDS)
+        process.inputStream.reader(Charsets.UTF_8).use {
+            it.forEachLine { line -> LoggerFactory.getLogger("RcloneOutput").info(line) }
+        }
+        process.waitFor(30, TimeUnit.MINUTES)
+        // ... (código de log de sucesso/erro) ...
     } catch (e: Exception) {
-        e.printStackTrace()
+        LoggerFactory.getLogger("OsActionHandler").error("Falha ao executar comando.", e)
     }
 }
 
-fun getSchedulerManager(): SchedulerManager {
+// --- Nova "Fábrica" que decide qual implementação usar ---
+fun getOsActionHandler(): Any {
     val osName = System.getProperty("os.name").lowercase()
     return when {
-        osName.contains("win") -> WindowsSchedulerManager()
-        osName.contains("nix") || osName.contains("nux") -> LinuxSchedulerManager()
+        osName.contains("win") -> WindowsCommandExecutor() // Retorna o executor para Windows
+        osName.contains("nix") || osName.contains("nux") -> LinuxSchedulerManager() // Retorna o agendador para Linux
         else -> throw UnsupportedOperationException("Sistema Operacional não suportado: $osName")
     }
 }
