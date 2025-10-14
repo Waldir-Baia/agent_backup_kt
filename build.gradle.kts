@@ -47,6 +47,9 @@ graalvmNative {
                 "--enable-url-protocols=http,https,ws,wss",
                 "-H:+AddAllCharsets",
                 "-H:+UnlockExperimentalVMOptions",
+                "--initialize-at-run-time",
+                "-march=compatibility",
+                "-H:+AllowDeprecatedInitializeAllClassesAtBuildTime"
             )
         }
     }
