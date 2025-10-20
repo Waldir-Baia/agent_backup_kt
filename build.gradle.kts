@@ -61,10 +61,12 @@ repositories {
 }
 
 dependencies {
+    implementation(libs.supabase.postgrest)
     implementation(libs.supabase.realtime)
     implementation(libs.ktor.client.cio)
     implementation(libs.logback.classic)
     implementation(libs.kotlinx.coroutines.core)
     implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+    implementation(libs.cron.utils)
 }
