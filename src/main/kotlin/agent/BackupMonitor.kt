@@ -1,6 +1,6 @@
 package com.waldirbaia.agent
 
-import BackupFileNameEntity
+import com.waldirbaia.models.BackupFileNameEntity
 import com.waldirbaia.models.BackupLogEntity
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
