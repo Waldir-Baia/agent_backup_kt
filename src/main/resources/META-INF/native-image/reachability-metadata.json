@@ -231,7 +231,7 @@
       ]
     },
     {
-      "type": "com.waldirbaia.models.BackupLog",
+      "type": "com.waldirbaia.models.BackupLogEntity",
       "fields": [
         {
           "name": "Companion"
@@ -239,7 +239,22 @@
       ]
     },
     {
-      "type": "com.waldirbaia.models.BackupLog$Companion",
+      "type": "com.waldirbaia.models.BackupLogEntity$Companion",
+      "methods": [
+        {
+          "name": "serializer",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.waldirbaia.models.BackupFileNameEntity",
+      "fields": [
+        { "name": "Companion" }
+      ]
+    },
+    {
+      "type": "com.waldirbaia.models.BackupFileNameEntity$Companion",
       "methods": [
         {
           "name": "serializer",
