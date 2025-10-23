@@ -23,7 +23,9 @@ class RealtimeManager {
 
     private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
         install(Realtime)
-        install(Postgrest)
+        install(Postgrest) {
+            serializer = createSupabaseSerializer()
+        }
     }
     private val jsonDecoder = Json { ignoreUnknownKeys = true }
     private val executionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())

@@ -26,7 +26,7 @@
     "allPublicMethods": true
   },
   {
-    "name": "com.waldirbaia.models.ClientInfo",
+    "name": "com.waldirbaia.models.ClientInfoEntity",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -39,7 +39,7 @@
     "queryAllPublicMethods": true
   },
   {
-    "name": "com.waldirbaia.models.ClientInfo$$serializer",
+    "name": "com.waldirbaia.models.ClientInfoEntity$$serializer",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -130,13 +130,13 @@
     "allPublicFields": true
   },
   {
-    "name": "com.waldirbaia.models.BackupLog",
+    "name": "com.waldirbaia.models.BackupLogEntity",
     "allDeclaredConstructors": true,
     "allPublicMethods": true,
     "allDeclaredFields": true
   },
   {
-    "name": "com.waldirbaia.models.BackupLog$$serializer",
+    "name": "com.waldirbaia.models.BackupLogEntity$$serializer",
     "allDeclaredConstructors": true,
     "allPublicMethods": true,
     "allDeclaredFields": true

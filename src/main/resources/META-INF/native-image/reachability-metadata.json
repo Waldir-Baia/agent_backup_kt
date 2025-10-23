@@ -248,6 +248,23 @@
       ]
     },
     {
+      "type": "com.waldirbaia.models.ClientInfoEntity",
+      "fields": [
+        {
+          "name": "Companion"
+        }
+      ]
+    },
+    {
+      "type": "com.waldirbaia.models.ClientInfoEntity$Companion",
+      "methods": [
+        {
+          "name": "serializer",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "com.waldirbaia.models.BackupFileNameEntity",
       "fields": [
         { "name": "Companion" }

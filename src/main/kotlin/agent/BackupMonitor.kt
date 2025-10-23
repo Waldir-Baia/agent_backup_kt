@@ -17,7 +17,9 @@ class BackupMonitor {
     private val logger = LoggerFactory.getLogger(BackupMonitor::class.java)
 
     private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
-        install(Postgrest)
+        install(Postgrest) {
+            serializer = createSupabaseSerializer()
+        }
     }
 
     suspend fun checkAndReportBackups() {

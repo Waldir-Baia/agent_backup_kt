@@ -4,6 +4,7 @@ import com.waldirbaia.agent.BackupMonitor
 import com.waldirbaia.agent.Config
 import com.waldirbaia.agent.ConfigSetup
 import com.waldirbaia.agent.RealtimeManager
+import com.waldirbaia.agent.createSupabaseSerializer
 import com.waldirbaia.models.ClientInfoEntity
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
@@ -20,7 +21,9 @@ private val logger = LoggerFactory.getLogger("MainKt")
 suspend fun registerClientIfNeeded() {
     logger.info("Registro: Verificando se o cliente '${Config.clientId}' já está cadastrado...")
     val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
-        install(Postgrest)
+        install(Postgrest) {
+            serializer = createSupabaseSerializer()
+        }
     }
 
     try {
