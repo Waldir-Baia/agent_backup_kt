@@ -8,6 +8,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.serializer.KotlinXSerializer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
@@ -21,22 +22,33 @@ class RealtimeManager {
     private val commandExecutor = getCommandExecutor()
     private val schedulerManager = getSchedulerManager()
 
-    private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
-        install(Realtime)
-        install(Postgrest) {
-            serializer = createSupabaseSerializer()
-        }
+    // Json único e estável (bom para native-image)
+    private val supabaseJson = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = false
     }
-    private val jsonDecoder = Json { ignoreUnknownKeys = true }
+
+    // Supabase client configurado com KotlinXSerializer
+    private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
+        // Aplica o serializer por padrão para todos os módulos (Postgrest/Realtime)
+        defaultSerializer = KotlinXSerializer(supabaseJson)
+
+        install(Postgrest) // sem serializer custom adicional
+        install(Realtime)  // config padrão; adicione opções se precisar
+    }
+
+    // Use o mesmo Json para decodificação dos payloads do Realtime
+    private val jsonDecoder = supabaseJson
+
     private val executionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     suspend fun connectAndListen() {
-        // Conectar aos dois canais
         connectExecutionsRealtime()
         connectSchedulesRealtime()
     }
 
-    // Canal 1: Execuções Imediatas (mantém como está)
+    // Canal 1: Execuções Imediatas
     private suspend fun connectExecutionsRealtime() {
         logger.info("🔌 Conectando: execucoes_realtime...")
         val channel = supabase.channel("execucoes-realtime-channel")
@@ -61,13 +73,14 @@ class RealtimeManager {
                         logger.error("❌ Erro: ${e.message}", e)
                     }
                 }
-            }.launchIn(CoroutineScope(Dispatchers.Default))
+            }
+            .launchIn(CoroutineScope(Dispatchers.Default))
 
         channel.subscribe()
         logger.info("✅ Canal 'execucoes_realtime' ativo")
     }
 
-    // Canal 2: Agendamentos (NOVO)
+    // Canal 2: Agendamentos
     private suspend fun connectSchedulesRealtime() {
         logger.info("🔌 Conectando: agendamentos...")
         val channel = supabase.channel("agendamentos-channel")
@@ -94,7 +107,8 @@ class RealtimeManager {
                 } catch (e: Exception) {
                     logger.error("❌ Erro ao processar agendamento: ${e.message}", e)
                 }
-            }.launchIn(CoroutineScope(Dispatchers.Default))
+            }
+            .launchIn(CoroutineScope(Dispatchers.Default))
 
         channel.subscribe()
         logger.info("✅ Canal 'agendamentos' ativo (cron interno)")
@@ -126,13 +140,11 @@ class RealtimeManager {
                 logger.info("➕ Novo agendamento: ${payload.schedule_name}")
                 schedulerManager.createOrUpdateTask(payload)
             }
-
             is PostgresAction.Update -> {
                 val payload = jsonDecoder.decodeFromJsonElement(SchedulePayload.serializer(), change.record)
                 logger.info("🔄 Agendamento atualizado: ${payload.schedule_name}")
                 schedulerManager.createOrUpdateTask(payload)
             }
-
             is PostgresAction.Delete -> {
                 val scheduleName = change.oldRecord["schedule_name"]?.jsonPrimitive?.content
                 if (scheduleName != null) {
@@ -140,8 +152,9 @@ class RealtimeManager {
                     schedulerManager.deleteTask(scheduleName)
                 }
             }
-
-            is PostgresAction.Select -> TODO()
+            is PostgresAction.Select -> {
+                // normalmente não precisa tratar
+            }
         }
     }
 

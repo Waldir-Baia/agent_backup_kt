@@ -15,19 +15,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 
-
 private val logger = LoggerFactory.getLogger("MainKt")
 
-suspend fun registerClientIfNeeded() {
-    logger.info("Registro: Verificando se o cliente '${Config.clientId}' já está cadastrado...")
-    val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
+// Se quiser reaproveitar o mesmo client em todo o app:
+private val supabaseClient by lazy {
+    createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
+        defaultSerializer = createSupabaseSerializer()
         install(Postgrest) {
             serializer = createSupabaseSerializer()
         }
     }
+}
+
+suspend fun registerClientIfNeeded() {
+    logger.info("Registro: Verificando se o cliente '${Config.clientId}' já está cadastrado...")
 
     try {
-        val result = supabase.from("clientes").select {
+        val result = supabaseClient.from("clientes").select {
             filter { eq("client_id", Config.clientId) }
             count(Count.EXACT)
         }
@@ -39,14 +43,13 @@ suspend fun registerClientIfNeeded() {
                 nome_empresa = Config.companyName,
                 cnpj_empresa = Config.companyCnpj
             )
-            supabase.from("clientes").insert(newClient)
+            supabaseClient.from("clientes").insert(newClient)
             logger.info("Registro: Cliente '${Config.companyName}' registrado com sucesso!")
-
         } else {
             logger.info("Registro: Cliente já está cadastrado. Nenhuma ação necessária.")
         }
     } catch (e: Exception) {
-        logger.error("Registro ERRO: Falha ao tentar registrar o cliente. Causa: ${e.message}")
+        logger.error("Registro ERRO: Falha ao tentar registrar o cliente. Causa: ${e.message}", e)
     }
 }
 
@@ -75,13 +78,14 @@ fun main() = runBlocking {
     logger.info("Iniciando Agente de Backup (Modo Supabase Realtime)...")
     logger.info("ID do Cliente: ${Config.clientId}")
 
+    // Garante cadastro do cliente
     registerClientIfNeeded()
 
+    // Inicia Realtime
     val realtimeManager = RealtimeManager()
-    launch {
-        realtimeManager.connectAndListen()
-    }
+    launch { realtimeManager.connectAndListen() }
 
+    // Inicia monitor de backups (loop a cada 60s)
     val backupMonitor = BackupMonitor()
     launch {
         while (true) {
@@ -93,9 +97,7 @@ fun main() = runBlocking {
     logger.info("Agente iniciado. Ouvindo por agendamentos e monitorando backups.")
 }
 
-/**
- * Exibe o banner do sistema
- */
+/** Exibe o banner do sistema */
 fun printBanner() {
     println("\n╔═══════════════════════════════════════════════════════════════╗")
     println("║                                                               ║")
@@ -106,9 +108,7 @@ fun printBanner() {
     println("╚═══════════════════════════════════════════════════════════════╝\n")
 }
 
-/**
- * Exibe informações do sistema carregado
- */
+/** Exibe informações do sistema carregado */
 fun displaySystemInfo() {
     println("╔═══════════════════════════════════════════════════════════════╗")
     println("║                  INFORMAÇÕES DO SISTEMA                       ║")
@@ -121,12 +121,9 @@ fun displaySystemInfo() {
     println("═══════════════════════════════════════════════════════════════\n")
 }
 
-/**
- * Formata o CNPJ no padrão XX.XXX.XXX/XXXX-XX
- */
+/** Formata o CNPJ no padrão XX.XXX.XXX/XXXX-XX */
 fun formatCNPJ(cnpj: String): String {
     if (cnpj.length != 14) return cnpj
-
     return "${cnpj.substring(0, 2)}.${cnpj.substring(2, 5)}.${cnpj.substring(5, 8)}/" +
             "${cnpj.substring(8, 12)}-${cnpj.substring(12, 14)}"
 }

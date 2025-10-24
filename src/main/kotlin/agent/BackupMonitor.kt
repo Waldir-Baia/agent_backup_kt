@@ -7,6 +7,8 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import org.slf4j.LoggerFactory
+import java.net.HttpURLConnection
+import java.net.URL
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -17,6 +19,7 @@ class BackupMonitor {
     private val logger = LoggerFactory.getLogger(BackupMonitor::class.java)
 
     private val supabase = createSupabaseClient(Config.supabaseUrl, Config.supabaseKey) {
+        defaultSerializer = createSupabaseSerializer()
         install(Postgrest) {
             serializer = createSupabaseSerializer()
         }
@@ -48,9 +51,7 @@ class BackupMonitor {
             // Buscar apenas os nomes dos arquivos existentes
             val existingFiles = supabase.from("backup_logs")
                 .select(columns = Columns.list("file_name")) {
-                    filter {
-                        eq("client_id", Config.clientId)
-                    }
+                    filter { eq("client_id", Config.clientId) }
                 }.decodeAs<List<BackupFileNameEntity>>()
 
             val existingFileNames = existingFiles.map { it.file_name }.toSet()
@@ -80,7 +81,6 @@ class BackupMonitor {
                     if (!integrityCheck.success) {
                         logger.error("❌ Monitor: Falha na verificação de integridade de '${file.name}': ${integrityCheck.errorMessage}")
 
-                        // Registrar erro no banco
                         val errorLog = BackupLogEntity(
                             client_id = Config.clientId,
                             file_name = file.name,
@@ -91,19 +91,18 @@ class BackupMonitor {
                             error_message = "ERRO DE INTEGRIDADE: ${integrityCheck.errorMessage}"
                         )
 
-                        supabase.from("backup_logs").insert(errorLog)
+                        postBackupLog(errorLog)
+
                         errorCount++
                         continue
                     }
 
                     logger.info("✅ Integridade verificada com sucesso!")
 
-                    // Criar a data formatada corretamente
                     val creationDate = Instant.ofEpochMilli(file.lastModified())
                         .atZone(ZoneId.systemDefault())
                         .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
-                    // Criar o objeto BackupLog
                     val logEntry = BackupLogEntity(
                         client_id = Config.clientId,
                         file_name = file.name,
@@ -111,14 +110,13 @@ class BackupMonitor {
                         file_creation_date = creationDate
                     )
 
-                    // Inserir no Supabase
-                    supabase.from("backup_logs").insert(logEntry)
+                    postBackupLog(logEntry)
 
                     successCount++
                     logger.info("✅ Monitor: Arquivo '${file.name}' registrado (${formatFileSize(file.length())})")
 
                 } catch (e: Exception) {
-                    logger.error("❌ Monitor: Erro ao processar '${file.name}': ${e.message}")
+                    logger.error("❌ Monitor: Erro ao processar '${file.name}': ${e.message}", e)
                     errorCount++
                 }
             }
@@ -138,11 +136,9 @@ class BackupMonitor {
      */
     private fun verifyFileIntegrity(file: File): IntegrityResult {
         try {
-            // Calcular hash local do arquivo (DropboxHash)
             val localHash = calculateDropboxHash(file)
             logger.debug("Hash local calculado: $localHash")
 
-            // Executar comando rclone para obter hash remoto
             val remotePath = "${Config.backupFolderPathRemote}/${file.name}"
             val command = listOf("rclone", "hashsum", "DropboxHash", remotePath)
 
@@ -160,9 +156,7 @@ class BackupMonitor {
                 )
             }
 
-            // Parse do output do rclone (formato: "hash filename")
             val remoteHash = output.trim().split("\\s+".toRegex()).firstOrNull()
-
             if (remoteHash.isNullOrBlank()) {
                 return IntegrityResult(
                     success = false,
@@ -172,11 +166,10 @@ class BackupMonitor {
 
             logger.debug("Hash remoto obtido: $remoteHash")
 
-            // Comparar hashes
-            if (localHash.equals(remoteHash, ignoreCase = true)) {
-                return IntegrityResult(success = true)
+            return if (localHash.equals(remoteHash, ignoreCase = true)) {
+                IntegrityResult(success = true)
             } else {
-                return IntegrityResult(
+                IntegrityResult(
                     success = false,
                     errorMessage = "Hash local ($localHash) não corresponde ao hash remoto ($remoteHash)"
                 )
@@ -190,10 +183,7 @@ class BackupMonitor {
         }
     }
 
-    /**
-     * Calcula o DropboxHash do arquivo local
-     * DropboxHash é um hash SHA256 dos blocos de 4MB do arquivo
-     */
+    /** Calcula o DropboxHash do arquivo local (SHA-256 por blocos de 4MB) */
     private fun calculateDropboxHash(file: File): String {
         val blockSize = 4 * 1024 * 1024 // 4MB
         val digest = MessageDigest.getInstance("SHA-256")
@@ -202,30 +192,55 @@ class BackupMonitor {
         file.inputStream().use { input ->
             val buffer = ByteArray(blockSize)
             var bytesRead: Int
-
             while (input.read(buffer).also { bytesRead = it } != -1) {
                 digest.reset()
                 digest.update(buffer, 0, bytesRead)
                 overallDigest.update(digest.digest())
             }
         }
-
         return overallDigest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    // Função auxiliar para formatar tamanho do arquivo
-    private fun formatFileSize(bytes: Long): String {
-        return when {
+    private fun formatFileSize(bytes: Long): String =
+        when {
             bytes < 1024 -> "$bytes B"
             bytes < 1024 * 1024 -> "${bytes / 1024} KB"
             bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
             else -> "${bytes / (1024 * 1024 * 1024)} GB"
         }
-    }
 
-    // Classe para resultado da verificação de integridade
     private data class IntegrityResult(
         val success: Boolean,
         val errorMessage: String? = null
     )
+
+    /**
+     * Fallback robusto: envia o JSON diretamente ao PostgREST evitando a serialização do Supabase-KT.
+     */
+    private fun postBackupLog(payload: BackupLogEntity) {
+        val url = URL("${Config.supabaseUrl.trimEnd('/')}/rest/v1/backup_logs")
+        val jsonBody = supabaseJson.encodeToString(BackupLogEntity.serializer(), payload)
+
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("apikey", Config.supabaseKey)
+            setRequestProperty("Authorization", "Bearer ${Config.supabaseKey}")
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Prefer", "return=minimal")
+            doOutput = true
+            connectTimeout = 15000
+            readTimeout = 30000
+        }
+
+        conn.outputStream.use { os ->
+            os.write(jsonBody.toByteArray(Charsets.UTF_8))
+        }
+
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            val err = runCatching { conn.errorStream?.readBytes()?.toString(Charsets.UTF_8) }.getOrNull()
+            throw RuntimeException("PostgREST insert failed (HTTP $code): ${err ?: "no error body"}")
+        }
+        conn.disconnect()
+    }
 }
